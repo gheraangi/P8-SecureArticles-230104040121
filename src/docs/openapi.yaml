@@ -1,0 +1,299 @@
+openapi: 3.0.0
+info:
+  title: Secure Articles API
+  version: 1.0.0
+  description: >
+    API Praktikum #8 — Security, RBAC, JWT, XSS Sanitization,
+    NoSQL Injection Protection, Rate Limiting, Logging, and Swagger UI.
+
+servers:
+  - url: http://localhost:3000
+
+tags:
+  - name: Auth
+    description: Authentication & JWT Endpoints
+  - name: Articles
+    description: CRUD + RBAC Articles
+  - name: System
+    description: Health & Documentation
+
+paths:
+
+  ##############################################
+  # AUTH ENDPOINTS
+  ##############################################
+
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register user baru
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterInput"
+      responses:
+        "201":
+          description: User registered
+        "400":
+          description: Invalid input
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login dan mendapatkan Access Token + Refresh Token (cookie)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Login success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken:
+                    type: string
+                  message:
+                    type: string
+        "401":
+          description: Invalid credentials
+
+  /api/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token menggunakan Refresh Token di cookie
+      responses:
+        "200":
+          description: New access token generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken:
+                    type: string
+        "401":
+          description: Refresh token missing / invalid
+
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout dan hapus refresh token cookie
+      responses:
+        "200":
+          description: Logged out successfully
+
+  /api/auth/me:
+    get:
+      tags: [Auth]
+      summary: Mendapatkan data user berdasarkan JWT
+      security:
+        - jwtAuth: []
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Missing or invalid token
+
+
+  ##############################################
+  # ARTICLE ENDPOINTS (CRUD + RBAC)
+  ##############################################
+
+  /api/articles:
+    get:
+      tags: [Articles]
+      summary: List semua artikel (public)
+      responses:
+        "200":
+          description: List of articles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Article"
+
+    post:
+      tags: [Articles]
+      summary: Create article (user/admin)
+      security:
+        - jwtAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArticleInput"
+      responses:
+        "201":
+          description: Article created
+        "401":
+          description: Unauthorized
+
+  /api/articles/{id}:
+    put:
+      tags: [Articles]
+      summary: Update article (owner/admin)
+      security:
+        - jwtAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArticleInput"
+      responses:
+        "200":
+          description: Updated
+        "403":
+          description: Forbidden
+        "404":
+          description: Article not found
+
+    delete:
+      tags: [Articles]
+      summary: Delete article (admin only)
+      security:
+        - jwtAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "403":
+          description: Admin only
+        "404":
+          description: Not found
+
+
+  ##############################################
+  # SYSTEM ENDPOINTS
+  ##############################################
+
+  /health:
+    get:
+      tags: [System]
+      summary: Cek status server
+      responses:
+        "200":
+          description: OK
+
+  /docs:
+    get:
+      tags: [System]
+      summary: Swagger UI
+      responses:
+        "200":
+          description: Swagger UI page
+
+
+##########################################################
+# COMPONENTS / SCHEMAS
+##########################################################
+
+components:
+
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+
+    ############################################
+    # USER SCHEMA
+    ############################################
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [user, admin]
+
+    RegisterInput:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+        role:
+          type: string
+          enum: [user, admin]
+
+    LoginInput:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+
+    ############################################
+    # ARTICLE SCHEMA
+    ############################################
+    Article:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        content:
+          type: string
+        status:
+          type: string
+          enum: [draft, published]
+        authorId:
+          type: string
+
+    ArticleInput:
+      type: object
+      required:
+        - title
+        - content
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+        status:
+          type: string
+          enum: [draft, published]

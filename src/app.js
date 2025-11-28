@@ -12,27 +12,28 @@ dotenv.config();
 
 import authRoutes from "./routes/auth.routes.js";
 import articleRoutes from "./routes/articles.routes.js";
+import systemRoutes from "./routes/system.routes.js";
 
 import correlationId from "./middlewares/correlationId.js";
 import requestLogger from "./middlewares/requestLogger.js";
 import errorHandler from "./middlewares/errorHandler.js";
 import logger from "./utils/logger.js";
 
-const app = express();
+const app = express();   // <-- HARUS DI SINI (sebelum app.use)
 
-// SECURITY: HTTP headers
+// SECURITY: HTTP Headers
 app.use(
   helmet({
-    frameguard: { action: "deny" }, // cegah iframe
-    xssFilter: true,                 // X-XSS-Protection
-    noSniff: true,                   // X-Content-Type-Options
-    ieNoOpen: true,                  // X-Download-Options
-    hidePoweredBy: true,             // Hilangkan "X-Powered-By: Express"
+    frameguard: { action: "deny" },
+    xssFilter: true,
+    noSniff: true,
+    ieNoOpen: true,
+    hidePoweredBy: true,
     referrerPolicy: { policy: "no-referrer" },
   })
 );
 
-// CONTENT SECURITY POLICY (CSP)
+// CSP
 app.use(
   helmet.contentSecurityPolicy({
     useDefaults: true,
@@ -45,61 +46,62 @@ app.use(
       "frame-src": ["'none'"],
       "object-src": ["'none'"],
       "base-uri": ["'self'"],
-      "form-action": ["'self'"]
+      "form-action": ["'self'"],
     }
   })
 );
 
+// HSTS
 app.use(
   helmet.hsts({
-    maxAge: 60 * 60 * 24 * 30, // 30 hari
+    maxAge: 60 * 60 * 24 * 30,
     includeSubDomains: true,
     preload: true
   })
 );
 
-
-// CORS - whitelist dari .env (pisah koma jika banyak)
+// CORS
 const whitelist = (process.env.CORS_WHITELIST || "http://localhost:3000").split(",");
 const corsOptions = {
   origin: (origin, callback) => {
-    // allow requests with no origin (e.g., curl, Postman)
     if (!origin) return callback(null, true);
-    if (whitelist.indexOf(origin) !== -1) {
-      return callback(null, true);
-    }
+    if (whitelist.includes(origin)) return callback(null, true);
     return callback(new Error("Not allowed by CORS"));
   },
   credentials: true
 };
 app.use(cors(corsOptions));
 
-// parsers
+// Parsers
 app.use(express.json());
 app.use(cookieParser());
 
+// Security Middlewares
 app.use(noSQL);
 app.use(sanitize);
 
-app.use(correlationId);    // ⭐ generate correlation id
-app.use(requestLogger());  // ⭐ log setiap request
+// Logging + Correlation ID
+app.use(correlationId);
+app.use(requestLogger());
 
-// GLOBAL rate limiter (lenient, protects minor abuse)
+// Rate Limiter
 const globalLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 200,            // max 200 req per minute per IP
+  windowMs: 60 * 1000,
+  max: 200,
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
 });
 app.use(globalLimiter);
 
-// mount routes (auth before articles is OK)
+// ROUTES
+app.use(systemRoutes);   // <-- DIPINDAH KE SINI (BENAR)
 app.use(authRoutes);
 app.use(articleRoutes);
 
+// ERROR HANDLER
 app.use(errorHandler);
 
-// health
+// Health
 app.get("/health", (req, res) => {
   res.json({
     success: true,
